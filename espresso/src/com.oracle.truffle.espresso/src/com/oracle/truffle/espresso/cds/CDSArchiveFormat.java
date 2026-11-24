@@ -42,6 +42,7 @@ interface CDSArchiveFormat {
 
     int MAGIC = 0x35973550;
 
-    int MAJOR_VERSION = 1;
-    int MINOR_VERSION = 1;
+    // 2.0: guest objects and arrays store their identity hash code.
+    int MAJOR_VERSION = 2;
+    int MINOR_VERSION = 0;
 }
