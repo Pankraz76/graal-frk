@@ -154,6 +154,7 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> imp
     @CompilationFinal private boolean useEspressoLibs;
     @CompilationFinal private boolean checkUnsafeArrayBounds;
     @CompilationFinal private boolean continuum;
+    @CompilationFinal private boolean cdsEnabled;
     @CompilationFinal private String nativeBackendId;
     @CompilationFinal private boolean useTRegex;
     @CompilationFinal private int maxStackTraceDepth;
@@ -258,6 +259,7 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> imp
         internalJvmciEnabled = env.getOptions().get(EspressoOptions.EnableJVMCI);
         externalJvmciEnabled = env.getOptions().get(EspressoOptions.ExposeJVMCIHelper);
         continuum = env.getOptions().get(EspressoOptions.Continuum);
+        cdsEnabled = isCDSEnabled(env.getOptions());
         maxStackTraceDepth = env.getOptions().get(EspressoOptions.MaxJavaStackTraceDepth);
         implicitInteropEnabled = env.getOptions().get(EspressoOptions.EnableImplicitInterop);
 
@@ -431,6 +433,7 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> imp
                         isOptionCompatible(newOptions, oldOptions, EspressoOptions.EnableJVMCI) &&
                         isOptionCompatible(newOptions, oldOptions, EspressoOptions.ExposeJVMCIHelper) &&
                         isOptionCompatible(newOptions, oldOptions, EspressoOptions.Continuum) &&
+                        isCDSEnabled(newOptions) == isCDSEnabled(oldOptions) &&
                         isOptionCompatible(newOptions, oldOptions, EspressoOptions.UseTRegex) &&
                         isOptionCompatible(newOptions, oldOptions, EspressoOptions.GuestFieldOffsetStrategy) &&
                         isOptionCompatible(newOptions, oldOptions, EspressoOptions.UseEspressoLibs) &&
@@ -441,6 +444,10 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> imp
 
     private static boolean isOptionCompatible(OptionValues oldOptions, OptionValues newOptions, OptionKey<?> option) {
         return oldOptions.get(option).equals(newOptions.get(option));
+    }
+
+    private static boolean isCDSEnabled(OptionValues options) {
+        return options.get(EspressoOptions.CDS) != EspressoOptions.XShareOption.off;
     }
 
     @Override
@@ -580,7 +587,7 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> imp
     public StaticProperty getArrayHashCodeProperty() {
         if (!canSetCustomIdentityHashCode()) {
             CompilerDirectives.transferToInterpreterAndInvalidate();
-            throw EspressoError.shouldNotReachHere("Accessing array hash code property without continuum or JVMCI set up.");
+            throw EspressoError.shouldNotReachHere("Accessing array hash code property without continuum, JVMCI or CDS set up.");
         }
         return arrayHashCodeProperty;
     }
@@ -600,8 +607,13 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> imp
         return builder.build(StaticObject.class, StaticObjectFactory.class);
     }
 
+    /**
+     * Whether objects carry an explicit identity hash code slot. Besides continuations and JVMCI,
+     * CDS needs it to restore the identity hash codes of archived objects: archived hash-based
+     * collections (e.g. the boot layer module graph) are only valid with the dump-time hashes.
+     */
     public boolean canSetCustomIdentityHashCode() {
-        return isContinuumEnabled() || isJVMCIEnabled();
+        return isContinuumEnabled() || isJVMCIEnabled() || cdsEnabled;
     }
 
     public StaticProperty getForeignProperty() {

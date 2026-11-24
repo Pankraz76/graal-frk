@@ -93,7 +93,12 @@ public final class Target_org_graalvm_continuations_IdentityHashCodes {
         return getHashCode(o, meta, language);
     }
 
-    private static int getHashCode(StaticObject o, Meta meta, EspressoLanguage language) {
+    /**
+     * Returns the identity hash code assigned to {@code o}, or {@code 0} if none was assigned yet.
+     * Unlike {@link #getIHashCode}, this never assigns one.
+     */
+    public static int getHashCode(StaticObject o, Meta meta, EspressoLanguage language) {
+        assert language.canSetCustomIdentityHashCode();
         if (o.isStaticStorage()) {
             return System.identityHashCode(o);
         }

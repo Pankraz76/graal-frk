@@ -58,6 +58,7 @@ import com.oracle.truffle.espresso.runtime.EspressoContext;
 import com.oracle.truffle.espresso.runtime.OS;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import com.oracle.truffle.espresso.substitutions.JavaType;
+import com.oracle.truffle.espresso.substitutions.continuations.Target_org_graalvm_continuations_IdentityHashCodes;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
 final class Reader implements CDSArchiveFormat {
@@ -326,6 +327,7 @@ final class Reader implements CDSArchiveFormat {
         int startPos = position();
         int skipSize = byteBuffer.getInt();
         StaticObject arrayClass = (StaticObject) readReferenceOrObject();
+        int identityHashCode = readUnsignedVarInt();
         InterpreterToVM interpreterToVM = espressoContext.getInterpreterToVM();
         EspressoLanguage espressoLanguage = espressoContext.getLanguage();
         Klass componentType = ((ArrayKlass) arrayClass.getMirrorKlass()).getComponentType();
@@ -334,6 +336,8 @@ final class Reader implements CDSArchiveFormat {
         StaticObject arrayInstance = componentType.isPrimitive()
                         ? espressoContext.getAllocator().createNewPrimitiveArray(componentType, length)
                         : espressoContext.getAllocator().createNewReferenceArray(componentType, length);
+
+        restoreIdentityHashCode(arrayInstance, identityHashCode);
 
         if (refId > 0) {
             materializedRefs.put(refId, arrayInstance);
@@ -391,6 +395,8 @@ final class Reader implements CDSArchiveFormat {
                 materializedRefs.put(refId, instance);
             }
         }
+
+        restoreIdentityHashCode(instance, readUnsignedVarInt());
 
         // Read all fields
         Klass current = klass.getMirrorKlass();
@@ -474,6 +480,16 @@ final class Reader implements CDSArchiveFormat {
             materializedRefs.put(refId, result);
         }
         return result;
+    }
+
+    /**
+     * Restores the dump-time identity hash code, see {@code Writer#writeIdentityHashCode}.
+     */
+    private void restoreIdentityHashCode(StaticObject instance, int identityHashCode) {
+        if (identityHashCode != 0) {
+            int actual = Target_org_graalvm_continuations_IdentityHashCodes.setHashCode(instance, identityHashCode, espressoContext.getMeta(), espressoContext.getLanguage());
+            assert actual == identityHashCode : "identity hash code of archived object already set to " + actual + ", expected " + identityHashCode;
+        }
     }
 
     private StaticObject createInstance(ObjectKlass clazz) {

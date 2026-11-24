@@ -53,6 +53,7 @@ import com.oracle.truffle.espresso.runtime.OS;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import com.oracle.truffle.espresso.shared.lookup.LookupMode;
 import com.oracle.truffle.espresso.substitutions.JavaType;
+import com.oracle.truffle.espresso.substitutions.continuations.Target_org_graalvm_continuations_IdentityHashCodes;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 
 final class Writer implements CDSArchiveFormat {
@@ -343,6 +344,7 @@ final class Writer implements CDSArchiveFormat {
 
             ArrayKlass arrayClass = (ArrayKlass) guestArray.getKlass();
             writeReferenceOrObject(arrayClass.mirror());
+            writeIdentityHashCode(guestArray);
 
             EspressoLanguage espressoLanguage = espressoContext.getLanguage();
             InterpreterToVM interpreterToVM = espressoContext.getInterpreterToVM();
@@ -388,6 +390,7 @@ final class Writer implements CDSArchiveFormat {
             writeReferenceOrObject(klass.mirror());
 
             resetArchivedStates(guestObject);
+            writeIdentityHashCode(guestObject);
 
             // Serialize all fields (including superclass fields)
             Klass current = klass;
@@ -417,6 +420,16 @@ final class Writer implements CDSArchiveFormat {
                 current = current.getSuperClass();
             }
         });
+    }
+
+    /**
+     * Archives the identity hash code of a guest object or array, as HotSpot does. Hash-based
+     * collections in the archived heap (e.g. {@code Configuration.graph} or {@code Module.reads})
+     * are only valid with the dump-time identity hash codes. Writes {@code 0} if no identity hash
+     * code was assigned yet, so dumping does not force one.
+     */
+    private void writeIdentityHashCode(StaticObject guestObject) {
+        writeUnsignedVarInt(Target_org_graalvm_continuations_IdentityHashCodes.getHashCode(guestObject, espressoContext.getMeta(), espressoContext.getLanguage()));
     }
 
     private static void resetArchivedStates(StaticObject guestObject) {
